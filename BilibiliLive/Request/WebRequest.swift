@@ -572,12 +572,8 @@ extension WebRequest {
         if options.enableFourK {
             parameters["fourk"] = 1
         }
-        if let access_key = ApiRequest.getToken()?.accessToken {
-            parameters["access_key"] = access_key
-        }
-        parameters["appkey"] = ApiRequest.appkey
-        parameters["local_id"] = 0
-        parameters["mobi_app"] = "android"
+        // 用网页格式请求：带 appkey / mobi_app=android 拿到的 CDN 地址会绑定解析服务器的大陆 IP，
+        // 从本地播放会 403。会员身份由解析服务器自己的登录 Cookie 提供，不再送出 access_key。
 
         // 同步b站cookie给代理域
 //        var headers: [String: String] = [:]
