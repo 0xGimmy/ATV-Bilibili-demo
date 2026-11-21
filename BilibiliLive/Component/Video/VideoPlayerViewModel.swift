@@ -424,8 +424,9 @@ extension VideoPlayerViewModel {
         guard Settings.areaLimitUnlock else { return nil }
         guard let epid = playInfo.epid, epid > 0 else { return nil }
 
-        let season = try await WebRequest.requestBangumiSeasonView(epid: epid)
-        let checkTitle = season.title.contains("僅") ? season.title : season.series_title
+        // 旧的 season 接口可能失效（502），拿不到标题就按默认区域尝试
+        let season = try? await WebRequest.requestBangumiSeasonView(epid: epid)
+        let checkTitle = season.map { $0.title.contains("僅") ? $0.title : $0.series_title } ?? ""
         let checkAreaList = parseAreaByTitle(title: checkTitle)
         guard !checkAreaList.isEmpty else { return nil }
 

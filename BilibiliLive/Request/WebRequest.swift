@@ -278,16 +278,46 @@ enum WebRequest {
     }
 }
 
+// MARK: - Area limit fallback
+
+extension WebRequest {
+    /// 解析服务器网址：可填 `http://host:port`（局域网），或只填域名（默认 https）
+    static func areaLimitServerURL(path: String) -> String? {
+        var base = Settings.areaLimitCustomServer.trimmingCharacters(in: .whitespaces)
+        guard Settings.areaLimitUnlock, !base.isEmpty else { return nil }
+        if !base.contains("://") { base = "https://" + base }
+        while base.hasSuffix("/") { base.removeLast() }
+        return base + path
+    }
+
+    /// 先直连；B 站回地区限制（-404 / -10403）时，用同样的参数改问解析服务器
+    static func requestWithAreaFallback<T: Decodable>(url: String,
+                                                      fallbackPath: String,
+                                                      parameters: Parameters,
+                                                      dataObj: String = "data") async throws -> T
+    {
+        do {
+            return try await request(url: url, parameters: parameters, dataObj: dataObj)
+        } catch let RequestError.statusFail(code, message) where code == -404 || code == -10403 {
+            guard let fallback = areaLimitServerURL(path: fallbackPath) else {
+                throw RequestError.statusFail(code: code, message: message)
+            }
+            Logger.info("[area] \(code) -> 解析服务器 \(fallbackPath)")
+            return try await request(url: fallback, parameters: parameters, dataObj: dataObj)
+        }
+    }
+}
+
 // MARK: - Video
 
 extension WebRequest {
     static func requestBangumiInfo(epid: Int) async throws -> BangumiInfo {
-        let info: BangumiInfo = try await request(url: "https://api.bilibili.com/pgc/view/web/season", parameters: ["ep_id": epid], dataObj: "result")
+        let info: BangumiInfo = try await requestWithAreaFallback(url: "https://api.bilibili.com/pgc/view/web/season", fallbackPath: "/pgc/view/web/season", parameters: ["ep_id": epid], dataObj: "result")
         return info
     }
 
     static func requestBangumiInfo(seasonID: Int) async throws -> BangumiInfo {
-        let res: BangumiInfo = try await request(url: "https://api.bilibili.com/pgc/view/web/season", parameters: ["season_id": seasonID], dataObj: "result")
+        let res: BangumiInfo = try await requestWithAreaFallback(url: "https://api.bilibili.com/pgc/view/web/season", fallbackPath: "/pgc/view/web/season", parameters: ["season_id": seasonID], dataObj: "result")
         return res
     }
 
@@ -343,7 +373,7 @@ extension WebRequest {
     }
 
     static func requestDetailVideo(aid: Int) async throws -> VideoDetail {
-        try await request(url: "https://api.bilibili.com/x/web-interface/view/detail", parameters: ["aid": aid])
+        try await requestWithAreaFallback(url: "https://api.bilibili.com/x/web-interface/view/detail", fallbackPath: "/x/web-interface/wbi/view/detail", parameters: ["aid": aid])
     }
 
     static func requestFavVideosList() async throws -> [FavListData] {
@@ -494,14 +524,15 @@ extension WebRequest {
     }
 
     static func requestPlayUrl(aid: Int, cid: Int, options: PlayURLRequestOptions = .regular) async throws -> VideoPlayURLInfo {
-        return try await request(url: EndPoint.playUrl,
-                                 parameters: ["avid": aid,
-                                              "cid": cid,
-                                              "qn": options.qn,
-                                              "type": "",
-                                              "fnver": 0,
-                                              "fnval": options.fnval,
-                                              "otype": "json"])
+        return try await requestWithAreaFallback(url: EndPoint.playUrl,
+                                                 fallbackPath: "/x/player/wbi/playurl",
+                                                 parameters: ["avid": aid,
+                                                              "cid": cid,
+                                                              "qn": options.qn,
+                                                              "type": "",
+                                                              "fnver": 0,
+                                                              "fnval": options.fnval,
+                                                              "otype": "json"])
     }
 
     static func requestPcgPlayUrl(aid: Int, cid: Int, options: PlayURLRequestOptions = .regular) async throws -> VideoPlayURLInfo {
@@ -526,11 +557,9 @@ extension WebRequest {
                                            area: String,
                                            options: PlayURLRequestOptions = .regular) async throws -> VideoPlayURLInfo
     {
-        let customServer = Settings.areaLimitCustomServer
-        guard !customServer.isEmpty else { throw ValidationError.argumentInvalid(message: "未设置解析服务器") }
+        guard let url = areaLimitServerURL(path: "/pgc/player/web/playurl") else { throw ValidationError.argumentInvalid(message: "未设置解析服务器") }
 
         // 解析服务器必须使用ep_id参数，不能使用avid参数，解析服务器一般有缓存，area和ep_id必须保持一致，要不然会被缓存拦截
-        let url = EndPoint.pcgPlayUrl.replacingOccurrences(of: "api.bilibili.com", with: customServer)
         var parameters: [String: Any] = ["ep_id": epid,
                                          "cid": cid,
                                          "qn": options.qn,

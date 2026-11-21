@@ -99,10 +99,10 @@ enum Settings {
     @UserDefault("Settings.requestHotWithoutCookie", defaultValue: false)
     static var requestHotWithoutCookie: Bool
 
-    @UserDefault("Settings.arealimit.unlock", defaultValue: false)
+    @UserDefault("Settings.arealimit.unlock", defaultValue: true)
     static var areaLimitUnlock: Bool
 
-    @UserDefault("Settings.arealimit.customServer", defaultValue: "")
+    @UserDefault("Settings.arealimit.customServer", defaultValue: "http://PuraVidas-Mac-Studio.local:8096")
     static var areaLimitCustomServer: String
 
     @UserDefault("Settings.ui.sideMenuAutoSelectChange", defaultValue: false)
